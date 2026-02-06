@@ -1,0 +1,53 @@
+name: Build kernel headers (Rockchip 4.4)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-headers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+    - name: Checkout rockchip kernel (shallow)
+      uses: actions/checkout@v4
+      with:
+        repository: rockchip-linux/kernel
+        ref: develop-4.4
+        fetch-depth: 1
+
+    - name: Install packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev \
+                                crossbuild-essential-armhf gcc-arm-linux-gnueabihf python2 \
+                                wget ccache
+        sudo ln -sf /usr/bin/python2 /usr/bin/python || true
+
+    - name: Prepare kernel config
+      run: |
+        if make ARCH=arm rk3036_defconfig 2>/dev/null; then
+          echo "Using rk3036_defconfig"
+        else
+          echo "rk3036_defconfig not found, using defconfig"
+          make ARCH=arm defconfig
+        fi
+
+    - name: Prepare modules and headers
+      env:
+        ARCH: arm
+        CROSS_COMPILE: arm-linux-gnueabihf-
+      run: |
+        make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules_prepare
+        make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} headers_install INSTALL_HDR_PATH=out/headers
+
+    - name: Pack headers
+      run: |
+        tar -cJf kernel-headers-develop-4.4-arm.tar.xz out/headers
+        ls -l kernel-headers-develop-4.4-arm.tar.xz
+
+    - name: Upload headers artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-headers-develop-4.4-arm
+        path: kernel-headers-develop-4.4-arm.tar.xz
