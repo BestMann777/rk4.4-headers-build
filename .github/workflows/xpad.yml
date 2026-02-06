@@ -1,9 +1,29 @@
-name: Build xpad module (Rockchip 4.4)
+name: Build RK4.4 Headers
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y software-properties-common
+        sudo add-apt-repository ppa:deadsnakes/ppa -y
+        sudo apt-get update
+        sudo apt-get install -y python2 build-essential libncurses-dev bison flex libssl-dev bc git
+
+    - name: Make python2 available as python
+      run: |
+        sudo ln -s /usr/bin/python2 /usr/bin/python
+
   build-xpad:
     runs-on: ubuntu-latest
     timeout-minutes: 120
