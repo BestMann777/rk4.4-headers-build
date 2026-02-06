@@ -1,0 +1,53 @@
+name: Build xpad module (Rockchip 4.4)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-xpad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+    - name: Checkout xpad
+      uses: actions/checkout@v4
+      with:
+        path: xpad  # сохраняем xpad в подпапку
+
+    - name: Checkout Rockchip kernel (shallow)
+      uses: actions/checkout@v4
+      with:
+        repository: rockchip-linux/kernel
+        ref: develop-4.4
+        path: rockchip-kernel
+        fetch-depth: 1
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev \
+                                crossbuild-essential-armhf gcc-arm-linux-gnueabihf python2 \
+                                wget ccache
+        sudo ln -sf /usr/bin/python2 /usr/bin/python || true
+
+    - name: Prepare kernel for module build
+      run: |
+        cd rockchip-kernel
+        make ARCH=arm rk3036_defconfig
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- modules_prepare
+
+    - name: Build xpad module
+      run: |
+        cd xpad
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- KDIR=../rockchip-kernel M=$PWD modules
+
+    - name: Pack xpad module
+      run: |
+        tar -cJf xpad.ko.tar.xz *.ko
+        ls -l xpad.ko.tar.xz
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: xpad-module
+        path: xpad.ko.tar.xz
