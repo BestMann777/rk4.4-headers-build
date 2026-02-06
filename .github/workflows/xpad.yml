@@ -1,4 +1,4 @@
-name: Build RK4.4 Headers
+name: Build RK4.4 Headers and xpad
 
 on:
   push:
@@ -7,67 +7,62 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-18.04
 
     steps:
-    - uses: actions/checkout@v3
+    # Чекаут репозитория с твоими патчами/headers
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-    - name: Set up dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y software-properties-common
-        sudo add-apt-repository ppa:deadsnakes/ppa -y
-        sudo apt-get update
-        sudo apt-get install -y python2 build-essential libncurses-dev bison flex libssl-dev bc git
-
-    - name: Make python2 available as python
-      run: |
-        sudo ln -s /usr/bin/python2 /usr/bin/python
-
-  build-xpad:
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-
-    steps:
-    - name: Checkout xpad
-      uses: actions/checkout@v4
-      with:
-        path: xpad  # сохраняем xpad в подпапку
-
-    - name: Checkout Rockchip kernel (shallow)
-      uses: actions/checkout@v4
-      with:
-        repository: rockchip-linux/kernel
-        ref: develop-4.4
-        path: rockchip-kernel
-        fetch-depth: 1
-
+    # Установка зависимостей
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential bc bison flex libssl-dev libncurses5-dev \
-                                crossbuild-essential-armhf gcc-arm-linux-gnueabihf python2-minimal \
-                                wget ccache
-        sudo ln -sf /usr/bin/python2 /usr/bin/python || true
+        sudo apt-get install -y \
+          python2 \
+          build-essential \
+          libncurses-dev \
+          bison \
+          flex \
+          libssl-dev \
+          bc \
+          git \
+          dkms \
+          linux-headers-$(uname -r)
 
-    - name: Prepare kernel for module build
+    # Сделать python2 доступным как python
+    - name: Make python2 available as python
       run: |
-        cd rockchip-kernel
-        make ARCH=arm rk3036_defconfig
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- modules_prepare
+        sudo ln -sf /usr/bin/python2 /usr/bin/python
 
-    - name: Build xpad module
+    # Подготовка исходников ядра и headers
+    - name: Prepare kernel sources
       run: |
-        cd xpad
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- KDIR=../rockchip-kernel M=$PWD modules
+        make mrproper
+        make headers_check
+        make INSTALL_HDR_PATH=./headers install
 
-    - name: Pack xpad module
+    # Клонирование xpad драйвера
+    - name: Clone xpad repository
       run: |
-        tar -cJf xpad.ko.tar.xz *.ko
-        ls -l xpad.ko.tar.xz
+        git clone https://github.com/paroj/xpad.git xpad-src
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
+    # Сборка xpad драйвера
+    - name: Build xpad driver
+      run: |
+        cd xpad-src
+        make -C /usr/src/linux-headers-$(uname -r) M=$(pwd) modules
+
+    # Проверка сборки
+    - name: List built modules
+      run: |
+        ls -lh xpad-src/*.ko
+
+    # Сборка и headers как артефакты
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
       with:
-        name: xpad-module
-        path: xpad.ko.tar.xz
+        name: rk4.4-headers-and-xpad
+        path: |
+          ./headers
+          xpad-src/*.ko
